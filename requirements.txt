@@ -1,0 +1,14 @@
+accelerate
+bitsandbytes
+datasets>=2.14.6
+deepspeed>=0.12.2
+flash-attn>=2.3.4
+huggingface_hub[inference]
+jupyterlab
+loguru
+peft>=0.6.1
+scipy
+tensorboard
+torch
+transformers>=4.35.0
+trl>=0.7.3
