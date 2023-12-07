@@ -6,6 +6,18 @@ from transformers.trainer import *
 from trl import SFTTrainer
 
 
+class DeepSpeedRemoveCallback(TrainerCallback):
+    def on_save(self, args, state, control, **kwargs):
+        if args.should_save:
+            checkpoint_path = os.path.join(
+                args.output_dir, f"checkpoint-{state.global_step}"
+            )
+            if f"global_step{state.global_step}" in os.listdir(checkpoint_path):
+                shutil.rmtree(
+                    os.path.join(checkpoint_path, f"global_step{state.global_step}")
+                )
+
+
 class SFTTrainerNoDeepspeedSave(SFTTrainer):
     """same as SFTTrainer, just skip deepspeed save_checkpoint"""
 
@@ -151,14 +163,69 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
         if self.args.should_save:
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
+    def save_model(
+        self, output_dir: Optional[str] = None, _internal_call: bool = False
+    ):
+        """
+        Will save the model, so you can reload it using `from_pretrained()`.
 
-class DeepSpeedRemoveCallback(TrainerCallback):
-    def on_save(self, args, state, control, **kwargs):
-        if args.should_save:
-            checkpoint_path = os.path.join(
-                args.output_dir, f"checkpoint-{state.global_step}"
-            )
-            if f"global_step{state.global_step}" in os.listdir(checkpoint_path):
-                shutil.rmtree(
-                    os.path.join(checkpoint_path, f"global_step{state.global_step}")
+        Will only save from the main process.
+        """
+
+        if output_dir is None:
+            output_dir = self.args.output_dir
+
+        if is_torch_tpu_available():
+            self._save_tpu(output_dir)
+        elif is_sagemaker_mp_enabled():
+            # Calling the state_dict needs to be done on the wrapped model and on all processes.
+            os.makedirs(output_dir, exist_ok=True)
+            state_dict = self.model_wrapped.state_dict()
+            if self.args.should_save:
+                self._save(output_dir, state_dict=state_dict)
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
+                Path(os.path.join(output_dir, "user_content.pt")).touch()
+        elif self.fsdp is not None or self.is_fsdp_enabled:
+            state_dict = self.model.state_dict() if not self.is_fsdp_enabled else {}
+            if self.args.should_save:
+                self._save(output_dir, state_dict=state_dict)
+            if self.is_fsdp_enabled:
+                # remove the dummy state_dict
+                remove_dummy_checkpoint(
+                    self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
                 )
+                save_fsdp_model(
+                    self.accelerator.state.fsdp_plugin,
+                    self.accelerator,
+                    self.model,
+                    output_dir,
+                )
+
+        elif self.is_deepspeed_enabled:
+            # this takes care of everything as long as we aren't under zero3
+            if version.parse(accelerate_version) <= version.parse("0.20.3"):
+                raise ValueError("Install Accelerate from main branch")
+            try:
+                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+            except ValueError:
+                logger.warning(
+                    " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
+                    " zero_to_fp32.py to recover weights"
+                )
+                if self.args.should_save:
+                    self._save(output_dir, state_dict={})
+                # remove the dummy state_dict
+                remove_dummy_checkpoint(
+                    self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
+                )
+                # self.model_wrapped.save_checkpoint(output_dir)
+
+        elif self.args.should_save:
+            self._save(output_dir)
+
+        # Push to the Hub when `save_model` is called by the user.
+        if self.args.push_to_hub and not _internal_call:
+            self.push_to_hub(commit_message="Model save")
