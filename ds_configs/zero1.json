@@ -1,4 +1,10 @@
 {
+  "bf16": {
+    "enabled": "auto"
+  },
+  "fp16": {
+    "enabled": "auto"
+  },
   "zero_optimization": {
     "stage": 1,
     "overlap_comm": true,

@@ -21,6 +21,8 @@ class DeepSpeedRemoveCallback(TrainerCallback):
 class SFTTrainerNoDeepspeedSave(SFTTrainer):
     """same as SFTTrainer, just skip deepspeed save_checkpoint"""
 
+    # NOTE: transformers>4.35에서는 아래의 checkpoint 부분 수정 필요
+
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
