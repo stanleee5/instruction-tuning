@@ -22,7 +22,8 @@ from transformers import (
 )
 from transformers.trainer_utils import IntervalStrategy
 
-from src.data import InstructionTuningCollator as DataCollator
+from src.data import InstructionTuningCollator as ITDataCollator
+from src.model import ModelArguments, load_model, load_tokenizer
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
 from src.utils import is_main_process, setup_loguru_logging_intercept
 
@@ -40,25 +41,16 @@ setup_loguru_logging_intercept(
 
 @dataclass
 class TrainingArguments(TrainingArguments):
-    label_names: Optional[List[str]] = field(default="labels")
+    # TODO: default cannot be ["labels"]. Pass it to cli hparam
+    # label_names: Optional[List[str]] = field(default=["labels"])
     gradient_checkpointing: bool = field(default=True)
     evaluation_strategy: Union[IntervalStrategy, str] = field(default="steps")
     logging_strategy: Union[IntervalStrategy, str] = field(default="steps")
     lr_scheduler_type: str = field(default="cosine")
     remove_unused_columns: Optional[bool] = field(default=False)
     optim: str = field(default="adamw_torch")
-
-
-@dataclass
-class ModelArguments:
-    model_name_or_path: str = field(default="robowaifudev/megatron-gpt2-345m")
-    use_flash_attn: Optional[bool] = field(default=True)
-    load_in_8bit: Optional[bool] = field(default=False)
-    # LoRA
-    use_lora: Optional[bool] = field(default=False)
-    lora_r: Optional[int] = field(default=32)
-    lora_alpha: Optional[int] = field(default=64)
-    lora_dropout: Optional[float] = field(default=0.1)
+    tf32: Optional[bool] = field(default=True)
+    neftune_noise_alpha: Optional[float] = field(default=None)
 
 
 @dataclass
@@ -71,8 +63,7 @@ class DataArguments:
     response_template: str = field(default="\n[/INST]\n")
     inp_strip: bool = field(default=True)
 
-    test_size: Optional[int] = field(default=None)
-    test_ratio: Optional[float] = field(default=0.1)
+    test_size: Optional[int] = field(default=32)
     max_seq_length: int = field(default=1536)
     masking: Optional[bool] = field(default=True)
 
@@ -84,51 +75,14 @@ def set_seed(seed: int = 42):
     transformers.set_seed(seed)
 
 
-def load_model(
-    model_name_or_path: str,
-    use_flash_attn: bool,
-    load_in_8bit: bool,
-    gradient_checkpointing: bool,
-):
-    logger.info("Loading model")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        use_flash_attention_2=use_flash_attn,
-        load_in_8bit=load_in_8bit,
-    )
-
-    # enable gradient checkpointing
-    if gradient_checkpointing:
-        logger.info("Enable gradient checkpointing")
-        model.gradient_checkpointing_enable()
-        model.config.use_cache = False
-
-    logger.info(model)
-    return model
-
-
-def load_tokenizer(model_name_or_path: str):
-    logger.info("Loading tokenizer")
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name_or_path, padding_side="right", add_prefix_space=False
-    )
-    tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
-    tokenizer.padding_side = "right"
-    logger.info(tokenizer)
-    return tokenizer
-
-
 def load_and_split_dataset(data_args: DataArguments):
     data_name_or_path = data_args.data_name_or_path
     load_fn = load_from_disk if os.path.exists(data_name_or_path) else load_dataset
     ds = load_fn(data_name_or_path)
 
     if "test" not in ds:
-        test_split = (
-            data_args.test_size if data_args.test_size else data_args.test_ratio
-        )
-        logger.info(f"Manually split test_split: {test_split}")
-        ds = ds["train"].train_test_split(test_size=test_split)
+        logger.info(f"Manually split test_size: {data_args.test_size}")
+        ds = ds["train"].train_test_split(test_size=data_args.test_size)
 
     logger.info(f"dataset: {ds}")
     logger.info(f"len(dataset): {len(ds['train'])}/{len(ds['test'])}")
@@ -189,7 +143,7 @@ def main():
         )
         # Ignore first space token for CodeLlama tokenizer
         # TODO: check with other tokenizers
-        data_collator = DataCollator(
+        data_collator = ITDataCollator(
             tokenizer=tokenizer,
             instruction_template=data_args.instruction_template,
             response_template=response_token_ids[1:],
