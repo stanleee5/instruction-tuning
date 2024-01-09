@@ -8,6 +8,8 @@ from itertools import chain
 from types import FrameType
 from typing import cast
 
+import datasets
+import transformers
 from loguru import logger
 
 
@@ -54,7 +56,21 @@ class InterceptHandler(logging.Handler):
             )
 
 
-def setup_loguru_logging_intercept(level=logging.DEBUG, modules=()):
+def get_logger():
+    """loguru logger works on main process"""
+    if not is_main_process():
+        logger.remove()
+
+    setup_loguru_logging_intercept()
+    datasets.utils.logging.set_verbosity_warning()
+    transformers.utils.logging.set_verbosity_info()
+
+    return logger
+
+
+def setup_loguru_logging_intercept(
+    level=logging.DEBUG, modules=["accelerate", "datasets", "transformers", "DeepSpeed"]
+):
     """intercept logging to loguru"""
     logging.basicConfig(handlers=[InterceptHandler()], level=level)  # noqa
     for logger_name in chain(("",), modules):

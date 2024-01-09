@@ -5,7 +5,7 @@ Instruction tuning script
 import os
 import random
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Union, cast
+from typing import Callable, Optional, Union, cast
 
 import datasets
 import numpy as np
@@ -14,29 +14,19 @@ import transformers
 from datasets import load_dataset, load_from_disk
 from loguru import logger
 from peft.tuners.lora import LoraConfig
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    HfArgumentParser,
-    TrainingArguments,
-)
+from transformers import HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import IntervalStrategy
 
 from src.data import InstructionTuningCollator as ITDataCollator
 from src.model import ModelArguments, load_model, load_tokenizer
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
-from src.utils import is_main_process, setup_loguru_logging_intercept
+from src.utils import get_logger, setup_loguru_logging_intercept
 
 # Setup loguru logger
-if not is_main_process():
-    logger.remove()
-else:
-    datasets.utils.logging.set_verbosity_warning()
-    transformers.utils.logging.set_verbosity_info()
-
-setup_loguru_logging_intercept(
-    modules=("accelerate", "datasets", "transformers", "DeepSpeed")
-)
+logger = get_logger()
+setup_loguru_logging_intercept()
+datasets.utils.logging.set_verbosity_warning()
+transformers.utils.logging.set_verbosity_info()
 
 
 @dataclass

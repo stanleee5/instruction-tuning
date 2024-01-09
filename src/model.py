@@ -8,10 +8,9 @@ import torch
 from loguru import logger
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-from src.utils import is_main_process
+from src.utils import get_logger
 
-if not is_main_process():
-    logger.remove()
+logger = get_logger()
 
 
 @dataclass
