@@ -28,21 +28,24 @@ def download_and_unload_peft(model_dir, dtype, revision, trust_remote_code):
 
     model = model.merge_and_unload()
 
-    os.makedirs(model_dir, exist_ok=True)
-    cache_dir = model_dir
-    logger.info(f"Saving the newly created merged model to {cache_dir}")
+    save_dir = args.save_dir if args.save_dir else model_dir
+    os.makedirs(save_dir, exist_ok=True)
+    logger.info(f"Saving the newly created merged model to {save_dir}")
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model_dir, trust_remote_code=trust_remote_code
+    )
     tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
-    tokenizer.save_pretrained(cache_dir)
+    tokenizer.save_pretrained(save_dir)
 
-    model.save_pretrained(cache_dir, safe_serialization=True)
-    model.config.save_pretrained(cache_dir)
+    model.save_pretrained(save_dir, safe_serialization=True)
+    model.config.save_pretrained(save_dir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model")
+    parser.add_argument("-m", "--model")
+    parser.add_argument("-s", "--save-dir", default=None)
     parser.add_argument("--dtype", default="float16")
     args = parser.parse_args()
 
