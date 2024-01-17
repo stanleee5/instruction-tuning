@@ -10,5 +10,5 @@ peft>=0.7
 scipy
 tensorboard
 torch
-transformers==4.35.0
+transformers==4.36.2
 trl==0.7.4
