@@ -13,12 +13,11 @@ import torch
 import transformers
 from datasets import load_dataset, load_from_disk
 from loguru import logger
-from peft.tuners.lora import LoraConfig
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import IntervalStrategy
 
 from src.data import InstructionTuningCollator as ITDataCollator
-from src.model import ModelArguments, load_model, load_tokenizer
+from src.model import ModelArguments, load_model, load_peft_config, load_tokenizer
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
 from src.utils import get_logger, setup_loguru_logging_intercept
 
@@ -53,7 +52,7 @@ class DataArguments:
     response_template: str = field(default="\n[/INST]\n")
     inp_strip: bool = field(default=True)
 
-    test_size: Optional[int] = field(default=32)
+    test_size: Optional[int] = field(default=512)
     max_seq_length: int = field(default=1536)
     masking: Optional[bool] = field(default=True)
 
@@ -139,20 +138,9 @@ def main():
             response_template=response_token_ids[1:],
         )
 
-    peft_config = None
-    if model_args.use_lora:
-        peft_config = LoraConfig(
-            r=model_args.lora_r,
-            lora_alpha=model_args.lora_alpha,
-            lora_dropout=model_args.lora_dropout,
-        )
+    model = load_model(training_args, model_args)
+    peft_config = load_peft_config(model_args)
 
-    model = load_model(
-        model_args.model_name_or_path,
-        model_args.use_flash_attn,
-        model_args.load_in_8bit,
-        training_args.gradient_checkpointing,
-    )
     trainer = SFTTrainer(
         model=model,
         args=training_args,

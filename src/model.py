@@ -1,11 +1,13 @@
 """
 model and tokenizer
 """
+import ast
 from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
 from loguru import logger
+from peft.tuners.lora import LoraConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from src.utils import get_logger
@@ -24,38 +26,38 @@ class ModelArguments:
     lora_r: Optional[int] = field(default=32)
     lora_alpha: Optional[int] = field(default=64)
     lora_dropout: Optional[float] = field(default=0.05)
+    # convert to list using ast.literal_eval (e.g. ["k_proj"])
+    target_modules: Optional[str] = field(default="None")
 
 
-def load_model(
-    model_name_or_path: str,
-    use_flash_attn: bool,
-    load_in_8bit: bool,
-    gradient_checkpointing: bool,
-) -> torch.nn.Module:
+def load_peft_config(model_args: ModelArguments):
+    peft_config = None
+    if model_args.use_lora:
+        peft_config = LoraConfig(
+            r=model_args.lora_r,
+            lora_alpha=model_args.lora_alpha,
+            lora_dropout=model_args.lora_dropout,
+            target_modules=ast.literal_eval(model_args.target_modules),
+        )
+    return peft_config
+
+
+def load_model(training_args, model_args) -> torch.nn.Module:
     logger.info("Loading model")
-    config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
-
-    if config.model_type == "llama":
-        flash_params = {"use_flash_attention_2": use_flash_attn}
-    elif config.model_type == "phi-msft":
-        flash_params = {
-            "flash_attn": use_flash_attn,
-            "flash_rotary": use_flash_attn,
-            "fused_dense": use_flash_attn,
-        }
-        # NOTE: gradient_checkpointing should be False (tarining_args)
-    else:
-        flash_params = {}
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, trust_remote_code=True
+    )
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        load_in_8bit=load_in_8bit,
+        model_args.model_name_or_path,
+        use_flash_attention_2=model_args.use_flash_attn,
+        load_in_8bit=model_args.load_in_8bit,
+        torch_dtype="auto",
         trust_remote_code=True,
-        **flash_params,
     )
 
     # enable gradient checkpointing
-    if gradient_checkpointing:
+    if training_args.gradient_checkpointing:
         logger.info("Enable gradient checkpointing")
         model.gradient_checkpointing_enable()
         model.config.use_cache = False
