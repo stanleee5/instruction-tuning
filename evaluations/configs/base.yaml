@@ -1,0 +1,35 @@
+# TGI
+tgi:
+  docker:
+    gpus: 0
+    network: dice.net
+    image: dice/text-generation-inference:v1.3.1
+    name: dice.docker-tgi
+    base_model_dir: /llm-models # base_model_path 위치
+    cache_dir: ~/.root/huggingface_cache
+  params:
+    max-best-of: 1
+    hostname: "0.0.0.0"
+    port: 80
+    max-concurrent-requests: 4096
+    max-input-length : 1024
+    max-total-tokens : 2048
+    max-batch-prefill-tokens : 8192
+    dtype : float16
+
+# BigCodeEval
+eval:
+  docker:
+    network: dice.net
+    image: dice/bigcode-evaluation-harness:multiple
+    name: dice.docker-eval
+    working_dir: /repos/bigcode-evaluation-harness # 작업 경로
+    save_root: ~/instruction-tuning/evaluations # 저장 경로
+    cache_dir: ~/.root/huggingface_cache
+  params:
+    tasks: "humaneval,humanevalsynthesize-python,humanevalsynthesize-cpp,humanevalsynthesize-java,humanevalsynthesize-js"
+    prompt: codellama
+    n_samples: 1
+    max_length_generation: 512
+    do_sample: False
+    temperature: 0.2
