@@ -10,4 +10,7 @@ RUN chsh -s $(which zsh)
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
     -t linuxonly -p autopep8 -p git -p zsh-autosuggestions
 
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+
 RUN pip install --no-cache-dir -r requirements.txt

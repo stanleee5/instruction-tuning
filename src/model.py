@@ -71,8 +71,8 @@ def load_tokenizer(model_name_or_path: str):
     tokenizer = AutoTokenizer.from_pretrained(
         model_name_or_path,
         padding_side="right",
-        add_prefix_space=False,
         trust_remote_code=True,
+        # add_prefix_space=False,
     )
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})

@@ -36,7 +36,7 @@ class TrainingArguments(TrainingArguments):
     evaluation_strategy: Union[IntervalStrategy, str] = field(default="steps")
     logging_strategy: Union[IntervalStrategy, str] = field(default="steps")
     lr_scheduler_type: str = field(default="cosine")
-    remove_unused_columns: Optional[bool] = field(default=False)
+    remove_unused_columns: Optional[bool] = field(default=True)
     optim: str = field(default="adamw_torch")
     tf32: Optional[bool] = field(default=True)
     neftune_noise_alpha: Optional[float] = field(default=None)
