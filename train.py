@@ -11,12 +11,13 @@ import datasets
 import numpy as np
 import torch
 import transformers
-from datasets import load_dataset, load_from_disk
 from loguru import logger
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import IntervalStrategy
 
+from src.data import DataArguments
 from src.data import InstructionTuningCollator as ITDataCollator
+from src.data import load_and_split_datasets
 from src.model import ModelArguments, load_model, load_peft_config, load_tokenizer
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
 from src.utils import get_logger, setup_loguru_logging_intercept
@@ -42,40 +43,11 @@ class TrainingArguments(TrainingArguments):
     neftune_noise_alpha: Optional[float] = field(default=None)
 
 
-@dataclass
-class DataArguments:
-    data_name_or_path: str = field(default=None)
-
-    instruction_key: Optional[str] = field(default="instruction")
-    response_key: Optional[str] = field(default="output")
-    instruction_template: str = field(default="[INST]\n")
-    response_template: str = field(default="\n[/INST]\n")
-    inp_strip: bool = field(default=True)
-
-    test_size: Optional[int] = field(default=512)
-    max_seq_length: int = field(default=1536)
-    masking: Optional[bool] = field(default=True)
-
-
 def set_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     transformers.set_seed(seed)
-
-
-def load_and_split_dataset(data_args: DataArguments):
-    data_name_or_path = data_args.data_name_or_path
-    load_fn = load_from_disk if os.path.exists(data_name_or_path) else load_dataset
-    ds = load_fn(data_name_or_path)
-
-    if "test" not in ds:
-        logger.info(f"Manually split test_size: {data_args.test_size}")
-        ds = ds["train"].train_test_split(test_size=data_args.test_size)
-
-    logger.info(f"dataset: {ds}")
-    logger.info(f"len(dataset): {len(ds['train'])}/{len(ds['test'])}")
-    return ds
 
 
 def get_formatting_func(
@@ -114,7 +86,7 @@ def main():
 
     set_seed(training_args.seed)
     tokenizer = load_tokenizer(model_args.model_name_or_path)
-    ds = load_and_split_dataset(data_args)
+    ds = load_and_split_datasets(data_args)
 
     # set formatting function
     formatting_func = get_formatting_func(
@@ -124,6 +96,8 @@ def main():
         data_args.response_key,
         data_args.inp_strip,
     )
+    logger.info(str(data_args.instruction_template))
+    logger.info(str(data_args.response_template))
 
     data_collator = None
     if data_args.masking:
