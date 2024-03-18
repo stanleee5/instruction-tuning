@@ -72,10 +72,9 @@ def load_tokenizer(model_name_or_path: str):
         model_name_or_path,
         padding_side="right",
         trust_remote_code=True,
-        # add_prefix_space=False,
+        add_eos_token=True,
     )
     if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
-    tokenizer.padding_side = "right"
+        tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
     logger.info(tokenizer)
     return tokenizer
