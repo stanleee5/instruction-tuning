@@ -1,6 +1,7 @@
 """
 model and tokenizer
 """
+
 import ast
 from dataclasses import dataclass, field
 from typing import Optional
@@ -24,7 +25,7 @@ class ModelArguments:
     # LoRA
     use_lora: Optional[bool] = field(default=False)
     lora_r: Optional[int] = field(default=32)
-    lora_alpha: Optional[int] = field(default=64)
+    lora_alpha: Optional[int] = field(default=16)
     lora_dropout: Optional[float] = field(default=0.05)
     # convert to list using ast.literal_eval (e.g. ["k_proj"])
     target_modules: Optional[str] = field(default="None")
@@ -33,11 +34,14 @@ class ModelArguments:
 def load_peft_config(model_args: ModelArguments):
     peft_config = None
     if model_args.use_lora:
+        target_modules = ast.literal_eval(model_args.target_modules)
+        logger.info(f"{target_modules = }")
+
         peft_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
             lora_dropout=model_args.lora_dropout,
-            target_modules=ast.literal_eval(model_args.target_modules),
+            target_modules=target_modules,
         )
     return peft_config
 

@@ -69,7 +69,8 @@ def get_logger():
 
 
 def setup_loguru_logging_intercept(
-    level=logging.DEBUG, modules=["accelerate", "datasets", "transformers", "DeepSpeed"]
+    level=logging.DEBUG,
+    modules=["accelerate", "datasets", "transformers", "trl", "DeepSpeed"],
 ):
     """intercept logging to loguru"""
     logging.basicConfig(handlers=[InterceptHandler()], level=level)  # noqa
