@@ -25,7 +25,7 @@ class ModelArguments:
     # LoRA
     use_lora: Optional[bool] = field(default=False)
     lora_r: Optional[int] = field(default=32)
-    lora_alpha: Optional[int] = field(default=16)
+    lora_alpha: Optional[int] = field(default=32)
     lora_dropout: Optional[float] = field(default=0.05)
     # convert to list using ast.literal_eval (e.g. ["k_proj"])
     target_modules: Optional[str] = field(default="None")
@@ -52,12 +52,19 @@ def load_model(training_args, model_args) -> torch.nn.Module:
         model_args.model_name_or_path, trust_remote_code=True
     )
 
+    model_kwargs = {}
+    if config.model_type == "llama":
+        model_kwargs.update(
+            {
+                "use_flash_attention_2": model_args.use_flash_attn,
+                "load_in_8bit": model_args.load_in_8bit,
+            }
+        )
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
-        use_flash_attention_2=model_args.use_flash_attn,
-        load_in_8bit=model_args.load_in_8bit,
         torch_dtype="auto",
         trust_remote_code=True,
+        **model_kwargs,
     )
 
     # enable gradient checkpointing
