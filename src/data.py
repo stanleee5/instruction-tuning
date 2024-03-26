@@ -3,12 +3,13 @@ Dataset and Collator
 """
 
 import os
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import yaml
-from datasets import DatasetDict, concatenate_datasets, load_dataset, load_from_disk
+from datasets import DatasetDict, load_dataset, load_from_disk
 from loguru import logger
 from transformers import DataCollatorForLanguageModeling
 from trl.trainer.utils import DataCollatorForCompletionOnlyLM
@@ -25,6 +26,7 @@ class DataArguments:
     instruction_template: str = field(default="[INST]\n")
     response_template: str = field(default="\n[/INST]\n")
     inp_strip: bool = field(default=True)
+    prompt_template: str = field(default=None)  # Overwrite template
 
     test_size: Optional[int] = field(default=512)
     max_seq_length: int = field(default=1280)
@@ -38,12 +40,12 @@ def load_ds(name_or_path: str) -> DatasetDict:
         return load_dataset(name_or_path)
 
 
-def load_and_split_datasets(data_args: DataArguments) -> DatasetDict:
-    data_name_or_path = data_args.data_name_or_path
+def load_and_split_datasets(args: DataArguments) -> DatasetDict:
+    data_name_or_path = args.data_name_or_path
     ds_dict = load_ds(data_name_or_path)
     if "test" not in ds_dict:
-        logger.info(f"Manually split test_size: {data_args.test_size}")
-        ds_dict = ds_dict["train"].train_test_split(test_size=data_args.test_size)
+        logger.info(f"Manually split test_size: {args.test_size}")
+        ds_dict = ds_dict["train"].train_test_split(test_size=args.test_size)
 
     logger.info(f"dataset: {ds_dict}")
     logger.info(f"len(train/test): {len(ds_dict['train'])}/{len(ds_dict['test'])}")

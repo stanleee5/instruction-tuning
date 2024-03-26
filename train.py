@@ -5,7 +5,7 @@ Instruction tuning script
 import os
 import random
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union, cast
+from typing import Callable, List, Optional, Union, cast
 
 import datasets
 import numpy as np
@@ -19,6 +19,7 @@ from src.data import DataArguments
 from src.data import InstructionTuningCollator as ITDataCollator
 from src.data import load_and_split_datasets
 from src.model import ModelArguments, load_model, load_peft_config, load_tokenizer
+from src.prompt_templates import PROMPT_TEMPLATES
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
 from src.utils import get_logger, setup_loguru_logging_intercept
 
@@ -30,9 +31,9 @@ transformers.utils.logging.set_verbosity_info()
 
 
 @dataclass
+# class TrainingArguments(DataArguments, TrainingArguments):
 class TrainingArguments(TrainingArguments):
-    # TODO: default cannot be ["labels"]. Pass it to cli hparam
-    # label_names: Optional[List[str]] = field(default=["labels"])
+    label_names: Optional[List[str]] = field(default_factory=lambda: ["labels"])
     gradient_checkpointing: bool = field(default=True)
     evaluation_strategy: Union[IntervalStrategy, str] = field(default="steps")
     logging_strategy: Union[IntervalStrategy, str] = field(default="steps")
@@ -72,17 +73,33 @@ def get_formatting_func(
     return func
 
 
-def main():
+def parse_args():
+    # Parse cli arguments and complete Args
     parser = HfArgumentParser([ModelArguments, DataArguments, TrainingArguments])
     (model_args, data_args, training_args) = parser.parse_args_into_dataclasses()
+
     model_args = cast(ModelArguments, model_args)
     data_args = cast(DataArguments, data_args)
     training_args = cast(TrainingArguments, training_args)
     training_args.logging_dir = training_args.output_dir
 
-    logger.info(training_args)
+    # Overwrite instruction/response template from prompt_format
+    if template := data_args.prompt_template:
+        assert template in PROMPT_TEMPLATES
+        data_args.instruction_template = PROMPT_TEMPLATES[template]["instruction"]
+        data_args.response_template = PROMPT_TEMPLATES[template]["response"]
+        logger.warning(f"Overwrite template from: {template}")
+        logger.warning(f"Instruction template: {data_args.instruction_template}")
+        logger.warning(f"Response template: {data_args.response_template}")
+
     logger.info(model_args)
     logger.info(data_args)
+    logger.info(training_args)
+    return model_args, data_args, training_args
+
+
+def main():
+    model_args, data_args, training_args = parse_args()
 
     set_seed(training_args.seed)
     tokenizer = load_tokenizer(model_args.model_name_or_path)
@@ -101,20 +118,28 @@ def main():
 
     data_collator = None
     if data_args.masking:
-        response_token_ids = tokenizer.encode(
-            data_args.response_template, add_special_tokens=False
+        is_codellama_tokenizer = (
+            type(tokenizer)
+            == transformers.models.code_llama.tokenization_code_llama_fast.CodeLlamaTokenizerFast
         )
-        # Ignore first space token for CodeLlama tokenizer
-        # TODO: check with other tokenizers
+        if is_codellama_tokenizer:
+            # 맨 앞에 붙는 special token 제거용
+            response_template = tokenizer.encode(
+                data_args.response_template, add_special_tokens=False
+            )[1:]
+        else:
+            response_template = data_args.response_template
+
         data_collator = ITDataCollator(
             tokenizer=tokenizer,
             instruction_template=data_args.instruction_template,
-            response_template=response_token_ids[1:],
+            response_template=response_template,
         )
 
     model = load_model(training_args, model_args)
     peft_config = load_peft_config(model_args)
 
+    training_args.data_args = vars(data_args)
     trainer = SFTTrainer(
         model=model,
         args=training_args,
