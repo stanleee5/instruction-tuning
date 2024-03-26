@@ -10,6 +10,7 @@ CUDA_VISIBLE_DEVICES=0 accelerate launch \
     --instruction_key instruction \
     --response_key output \
     --use_lora True \
+    --target_modules "q_proj,v_proj" \
     --max_step 100 \
     --warmup_steps 10 \
     --logging_steps 5 \

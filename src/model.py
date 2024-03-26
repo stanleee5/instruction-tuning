@@ -27,15 +27,17 @@ class ModelArguments:
     lora_r: Optional[int] = field(default=32)
     lora_alpha: Optional[int] = field(default=32)
     lora_dropout: Optional[float] = field(default=0.05)
-    # convert to list using ast.literal_eval (e.g. ["k_proj"])
-    target_modules: Optional[str] = field(default="None")
+    # convert to list using str.split(",") (e.g. "q_proj,v_proj")
+    target_modules: Optional[str] = field(default=None)
 
 
 def load_peft_config(model_args: ModelArguments):
     peft_config = None
     if model_args.use_lora:
-        target_modules = ast.literal_eval(model_args.target_modules)
-        logger.info(f"{target_modules = }")
+        target_modules = None
+        if model_args.target_modules:
+            target_modules = model_args.target_modules.split(",")
+            logger.info(f"{target_modules = }")
 
         peft_config = LoraConfig(
             r=model_args.lora_r,
@@ -86,6 +88,7 @@ def load_tokenizer(model_name_or_path: str):
         add_eos_token=True,
     )
     if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
+        # tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
+        tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
     logger.info(tokenizer)
     return tokenizer
