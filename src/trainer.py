@@ -22,7 +22,7 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
     """same as SFTTrainer, just skip deepspeed save_checkpoint"""
 
     def _save_optimizer_and_scheduler(self, output_dir):
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(
                 self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME)
@@ -46,8 +46,13 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
         elif self.is_deepspeed_enabled:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            # self.model_wrapped.save_checkpoint(output_dir)
-            pass
+            accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+            )
+            # if accept_exclude_frozen_parameters and _is_peft_model(self.model):
+            #     self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)
+            # else:
+            #     self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
             save_fsdp_model(
@@ -55,6 +60,7 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
                 self.accelerator,
                 self.model,
                 output_dir,
+                **_get_fsdp_ckpt_kwargs(),
             )
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin,
@@ -76,7 +82,7 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
         if (
             self.args.should_save
             and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
-            and not is_torch_tpu_available()
+            and not is_torch_xla_available()
         ):
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(
@@ -97,7 +103,7 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
         if output_dir is None:
             output_dir = self.args.output_dir
 
-        if is_torch_tpu_available():
+        if is_torch_xla_available():
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
