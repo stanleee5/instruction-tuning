@@ -17,4 +17,5 @@ sentencepiece
 tensorboard
 transformers==4.39.3
 trl>=0.8
+wandb
 # torch

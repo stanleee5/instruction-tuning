@@ -56,21 +56,10 @@ class InterceptHandler(logging.Handler):
             )
 
 
-def get_logger():
-    """loguru logger works on main process"""
-    if not is_main_process():
-        logger.remove()
-
-    setup_loguru_logging_intercept()
-    datasets.utils.logging.set_verbosity_warning()
-    transformers.utils.logging.set_verbosity_info()
-
-    return logger
-
-
 def setup_loguru_logging_intercept(
     level=logging.DEBUG,
-    modules=["accelerate", "datasets", "transformers", "trl", "DeepSpeed"],
+    # modules=["accelerate", "datasets", "transformers", "trl", "DeepSpeed"],
+    modules=["accelerate", "datasets", "transformers", "trl", "deepspeed"],
 ):
     """intercept logging to loguru"""
     logging.basicConfig(handlers=[InterceptHandler()], level=level)  # noqa
@@ -79,3 +68,13 @@ def setup_loguru_logging_intercept(
         mod_logger = logging.getLogger(logger_name)
         mod_logger.handlers = [InterceptHandler(level=level)]
         mod_logger.propagate = False
+
+
+def get_logger():
+    """loguru logger works on main process"""
+    if not is_main_process():
+        logger.remove()
+    setup_loguru_logging_intercept()
+    datasets.utils.logging.set_verbosity_warning()
+    transformers.utils.logging.set_verbosity_info()
+    return logger
