@@ -5,7 +5,7 @@ Instruction tuning script
 import os
 import random
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Union, cast
+from typing import List, Optional, Union, cast
 
 import datasets
 import numpy as np
@@ -17,7 +17,7 @@ from transformers.trainer_utils import IntervalStrategy
 
 from src.data import DataArguments
 from src.data import InstructionTuningCollator as ITDataCollator
-from src.data import load_and_split_datasets
+from src.data import get_formatting_func, load_and_split_datasets
 from src.model import ModelArguments, load_model, load_peft_config, load_tokenizer
 from src.prompt_templates import PROMPT_TEMPLATES
 from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
@@ -49,28 +49,6 @@ def set_seed(seed: int = 42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     transformers.set_seed(seed)
-
-
-def get_formatting_func(
-    instruction_template: str,
-    response_template: str,
-    instruction_key: str,
-    response_key: str,
-    inp_strip: bool,
-) -> Callable:
-    def func(examples) -> str:
-        texts = []
-        for idx in range(len(examples[instruction_key])):
-            prompt = examples[instruction_key][idx]
-            if "input" in examples:
-                prompt = f"{prompt}\n{examples['input'][idx]}"
-            completion = examples[response_key][idx]
-            if inp_strip:
-                prompt = prompt.strip()
-            texts.append(instruction_template + prompt + response_template + completion)
-        return texts
-
-    return func
 
 
 def parse_args():
@@ -106,13 +84,7 @@ def main():
     ds = load_and_split_datasets(data_args)
 
     # set formatting function
-    formatting_func = get_formatting_func(
-        data_args.instruction_template,
-        data_args.response_template,
-        data_args.instruction_key,
-        data_args.response_key,
-        data_args.inp_strip,
-    )
+    formatting_func = get_formatting_func(data_args, tokenizer.eos_token)
     logger.info(str(data_args.instruction_template))
     logger.info(str(data_args.response_template))
 

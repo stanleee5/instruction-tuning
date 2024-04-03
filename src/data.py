@@ -5,14 +5,17 @@ Dataset and Collator
 import os
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 import yaml
 from datasets import DatasetDict, load_dataset, load_from_disk
-from loguru import logger
 from transformers import DataCollatorForLanguageModeling
 from trl.trainer.utils import DataCollatorForCompletionOnlyLM
+
+from src.utils import get_logger
+
+logger = get_logger()
 
 
 @dataclass
@@ -50,6 +53,32 @@ def load_and_split_datasets(args: DataArguments) -> DatasetDict:
     logger.info(f"dataset: {ds_dict}")
     logger.info(f"len(train/test): {len(ds_dict['train'])}/{len(ds_dict['test'])}")
     return ds_dict
+
+
+def get_formatting_func(
+    data_args: DataArguments,
+    eos_token: str,
+) -> Callable:
+    def func(examples) -> str:
+        texts = []
+        for idx in range(len(examples[data_args.instruction_key])):
+            prompt = examples[data_args.instruction_key][idx]
+            if "input" in examples:
+                prompt = f"{prompt}\n{examples['input'][idx]}"
+            if data_args.inp_strip:
+                prompt = prompt.strip()
+            completion = examples[data_args.response_key][idx]
+            text = (
+                data_args.instruction_template
+                + prompt
+                + data_args.response_template
+                + completion
+                + eos_token
+            )
+            texts.append(text)
+        return texts
+
+    return func
 
 
 class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):

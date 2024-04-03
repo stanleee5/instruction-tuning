@@ -85,10 +85,10 @@ def load_tokenizer(model_name_or_path: str):
         model_name_or_path,
         padding_side="right",
         trust_remote_code=True,
-        add_eos_token=True,
+        # add_eos_token=True,
     )
     if tokenizer.pad_token is None:
-        # tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
-        tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+        # https://clay-atlas.com/us/blog/2024/01/01/mistral-sft-trainer-cannot-generate-eos-token/
+        tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
     logger.info(tokenizer)
     return tokenizer
