@@ -25,7 +25,7 @@ class ModelArguments:
     # LoRA
     use_lora: Optional[bool] = field(default=False)
     lora_r: Optional[int] = field(default=32)
-    lora_alpha: Optional[int] = field(default=32)
+    lora_alpha: Optional[int] = field(default=16)
     lora_dropout: Optional[float] = field(default=0.05)
     # convert to list using str.split(",") (e.g. "q_proj,v_proj")
     target_modules: Optional[str] = field(default=None)

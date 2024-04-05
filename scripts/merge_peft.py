@@ -33,9 +33,11 @@ def download_and_unload_peft(model_dir, dtype, revision, trust_remote_code):
     logger.info(f"Saving the newly created merged model to {save_dir}")
 
     tokenizer = AutoTokenizer.from_pretrained(
-        base_model_dir, trust_remote_code=trust_remote_code
+        base_model_dir,
+        padding_side="right",
+        trust_remote_code=trust_remote_code,
     )
-    tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+    tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
     tokenizer.save_pretrained(save_dir)
 
     model.save_pretrained(save_dir, safe_serialization=True)

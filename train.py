@@ -36,7 +36,8 @@ class TrainingArguments(TrainingArguments):
     lr_scheduler_type: str = field(default="cosine")
     remove_unused_columns: Optional[bool] = field(default=True)
     optim: str = field(default="adamw_torch")
-    tf32: Optional[bool] = field(default=True)
+    max_grad_norm: float = field(default=0.5)
+    tf32: Optional[bool] = field(default=False)
     neftune_noise_alpha: Optional[float] = field(default=None)
 
     wandb_project: Optional[str] = field(default=None)
