@@ -2,12 +2,10 @@
 model and tokenizer
 """
 
-import ast
 from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
-from loguru import logger
 from peft.tuners.lora import LoraConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
@@ -58,7 +56,7 @@ def load_model(training_args, model_args) -> torch.nn.Module:
     if config.model_type == "llama":
         model_kwargs.update(
             {
-                "use_flash_attention_2": model_args.use_flash_attn,
+                "attn_implementation": "flash_attention_2",
                 "load_in_8bit": model_args.load_in_8bit,
             }
         )

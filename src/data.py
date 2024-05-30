@@ -55,10 +55,9 @@ def load_and_split_datasets(args: DataArguments) -> DatasetDict:
     return ds_dict
 
 
-def get_formatting_func(
-    data_args: DataArguments,
-    eos_token: str,
-) -> Callable:
+def get_formatting_func(data_args: DataArguments, tokenizer) -> Callable:
+    eos_token_to_add = tokenizer.eos_token
+
     def func(examples) -> str:
         texts = []
         for idx in range(len(examples[data_args.instruction_key])):
@@ -73,7 +72,7 @@ def get_formatting_func(
                 + prompt
                 + data_args.response_template
                 + completion
-                + eos_token
+                + eos_token_to_add
             )
             texts.append(text)
         return texts

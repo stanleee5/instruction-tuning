@@ -6,11 +6,9 @@ import random
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, cast
 
-import datasets
 import numpy as np
 import torch
 import transformers
-from loguru import logger
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import IntervalStrategy
 
@@ -89,7 +87,7 @@ def main():
                     if type(v) in [float, str, int, bool, dict]
                 },
             )
-        except:
+        except Exception:
             logger.warning("wandb not usable")
             training_args.report_to = ["tensorboard"]
 
@@ -102,7 +100,7 @@ def main():
     ds = load_and_split_datasets(data_args)
 
     # set formatting function
-    formatting_func = get_formatting_func(data_args, tokenizer.eos_token)
+    formatting_func = get_formatting_func(data_args, tokenizer)
     logger.info(repr(data_args.instruction_template))
     logger.info(repr(data_args.response_template))
 
