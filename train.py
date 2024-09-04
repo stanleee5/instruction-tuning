@@ -12,7 +12,13 @@ import transformers
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import IntervalStrategy
 
-import wandb
+try:
+    import wandb
+
+    WANDB_INSTALLED = True
+except ImportError:
+    WANDB_INSTALLED = False
+
 from src.data import DataArguments
 from src.data import InstructionTuningCollator as ITDataCollator
 from src.data import get_formatting_func, load_and_split_datasets
@@ -40,6 +46,7 @@ class TrainingArguments(TrainingArguments):
 
     wandb_project: Optional[str] = field(default=None)
     wandb_name: Optional[str] = field(default=None)
+    report_to: str = field(default="tensorboard")
 
 
 def set_seed(seed: int = 42):
@@ -75,21 +82,22 @@ def parse_args():
 def main():
     model_args, data_args, training_args = parse_args()
     training_args.data_args = vars(data_args)
-    if "wandb" in training_args.report_to and is_main_process():
-        try:
-            logger.info("Using wandb for logging")
-            wandb.init(
-                project=training_args.wandb_project,
-                name=training_args.wandb_name,
-                config={
-                    k: v
-                    for k, v in vars(training_args).items()
-                    if type(v) in [float, str, int, bool, dict]
-                },
-            )
-        except Exception:
-            logger.warning("wandb not usable")
-            training_args.report_to = ["tensorboard"]
+    if WANDB_INSTALLED:
+        if "wandb" in training_args.report_to and is_main_process():
+            try:
+                logger.info("Using wandb for logging")
+                wandb.init(
+                    project=training_args.wandb_project,
+                    name=training_args.wandb_name,
+                    config={
+                        k: v
+                        for k, v in vars(training_args).items()
+                        if type(v) in [float, str, int, bool, dict]
+                    },
+                )
+            except Exception:
+                logger.warning("wandb not usable")
+                training_args.report_to = ["tensorboard"]
 
     logger.info(model_args)
     logger.info(data_args)
