@@ -15,4 +15,8 @@ PROMPT_TEMPLATES = {
         "instruction": "[INST]\n",
         "response": "\n[/INST]\n",
     },
+    "chatml": {
+        "instruction": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n",
+        "response": "<|im_end|>\n<|im_start|>assistant\n",
+    },
 }

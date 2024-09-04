@@ -3,12 +3,10 @@ Dataset and Collator
 """
 
 import os
-import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
-import yaml
 from datasets import DatasetDict, load_dataset, load_from_disk
 from transformers import DataCollatorForLanguageModeling
 from trl.trainer.utils import DataCollatorForCompletionOnlyLM
@@ -22,17 +20,21 @@ logger = get_logger()
 class DataArguments:
     # Load from YAML config or name/path
     data_name_or_path: str = field(default=None)
-    data_config_yaml: str = field(default=None)
+    # data_config_yaml: str = field(default=None)
+    test_size: Optional[int] = field(default=512)
 
+    # format: {instruction, response}
     instruction_key: Optional[str] = field(default="instruction")
     response_key: Optional[str] = field(default="output")
-    instruction_template: str = field(default="[INST]\n")
-    response_template: str = field(default="\n[/INST]\n")
     inp_strip: bool = field(default=True)
     prompt_template: str = field(default=None)  # Overwrite template
+    instruction_template: str = field(default="[INST]\n")
+    response_template: str = field(default="\n[/INST]\n")
 
-    test_size: Optional[int] = field(default=512)
-    max_seq_length: int = field(default=1280)
+    # format: {[conversations]}
+    conversations_key: Optional[str] = field(default=None)
+
+    max_seq_length: int = field(default=2048)
     masking: Optional[bool] = field(default=True)
 
 
@@ -58,7 +60,15 @@ def load_and_split_datasets(args: DataArguments) -> DatasetDict:
 def get_formatting_func(data_args: DataArguments, tokenizer) -> Callable:
     eos_token_to_add = tokenizer.eos_token
 
-    def func(examples) -> str:
+    def conversations_func(examples) -> str:
+        conversations = examples[data_args.conversations_key]
+        texts = [
+            tokenizer.apply_chat_template(conversation, tokenize=False)
+            for conversation in conversations
+        ]
+        return texts
+
+    def single_response_func(examples) -> str:
         texts = []
         for idx in range(len(examples[data_args.instruction_key])):
             prompt = examples[data_args.instruction_key][idx]
@@ -77,7 +87,14 @@ def get_formatting_func(data_args: DataArguments, tokenizer) -> Callable:
             texts.append(text)
         return texts
 
-    return func
+    if data_args.conversations_key:
+        logger.info("Format: Converstations with 'apply_chat_template'")
+        return conversations_func
+    else:
+        logger.info("Format: Single-turn instruction->response")
+        return single_response_func
+
+    return single_response_func
 
 
 class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
