@@ -18,7 +18,7 @@ class DeepSpeedRemoveCallback(TrainerCallback):
                 )
 
 
-class SFTTrainerNoDeepspeedSave(SFTTrainer):
+class SFTTrainerModelSaveOnly(SFTTrainer):
     """same as SFTTrainer, just skip deepspeed save_checkpoint"""
 
     def _save_optimizer_and_scheduler(self, output_dir):
@@ -50,25 +50,28 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
                 inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
             )
             # if accept_exclude_frozen_parameters and _is_peft_model(self.model):
-            #     self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)
+            #     self.model_wrapped.save_checkpoint(
+            #         output_dir, exclude_frozen_parameters=True
+            #     )
             # else:
             #     self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
+            pass
             # save fsdp specific ckpt for resuming from ckpt
-            save_fsdp_model(
-                self.accelerator.state.fsdp_plugin,
-                self.accelerator,
-                self.model,
-                output_dir,
-                **_get_fsdp_ckpt_kwargs(),
-            )
-            save_fsdp_optimizer(
-                self.accelerator.state.fsdp_plugin,
-                self.accelerator,
-                self.optimizer,
-                self.model,
-                output_dir,
-            )
+            # save_fsdp_model(
+            #     self.accelerator.state.fsdp_plugin,
+            #     self.accelerator,
+            #     self.model,
+            #     output_dir,
+            #     **_get_fsdp_ckpt_kwargs(),
+            # )
+            # save_fsdp_optimizer(
+            #     self.accelerator.state.fsdp_plugin,
+            #     self.accelerator,
+            #     self.optimizer,
+            #     self.model,
+            #     output_dir,
+            # )
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(
@@ -138,7 +141,7 @@ class SFTTrainerNoDeepspeedSave(SFTTrainer):
                 remove_dummy_checkpoint(
                     self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
                 )
-                # self.model_wrapped.save_checkpoint(output_dir)
+                self.model_wrapped.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)

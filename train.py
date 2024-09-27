@@ -24,7 +24,7 @@ from src.data import InstructionTuningCollator as ITDataCollator
 from src.data import get_formatting_func, load_and_split_datasets
 from src.model import ModelArguments, load_model, load_peft_config, load_tokenizer
 from src.prompt_templates import PROMPT_TEMPLATES
-from src.trainer import SFTTrainerNoDeepspeedSave as SFTTrainer
+from src.trainer import SFTTrainerModelSaveOnly as SFTTrainer
 from src.utils import get_logger, is_main_process
 
 # Setup loguru logger
@@ -44,8 +44,8 @@ class TrainingArguments(TrainingArguments):
     tf32: Optional[bool] = field(default=False)
     neftune_noise_alpha: Optional[float] = field(default=None)
 
-    wandb_project: Optional[str] = field(default=None)
-    wandb_name: Optional[str] = field(default=None)
+    # wandb_project: Optional[str] = field(default=None)
+    # wandb_name: Optional[str] = field(default=None)
     report_to: str = field(default="tensorboard")
 
 

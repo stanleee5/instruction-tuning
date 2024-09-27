@@ -1,21 +1,21 @@
-accelerate==0.28.0
+accelerate>=0.29.3
 bitsandbytes
 black
 datasets>=2.16
-deepspeed==0.13.1
-flash-attn==2.5.6
+deepspeed>=0.15
+flash-attn>=2.5.8
 huggingface_hub[inference]
 icecream
 jupyterlab
+liger_kernel
 loguru
 nvitop
-peft==0.10.0
+peft>=0.10.0
 pre-commit
 pylint
 scipy
 sentencepiece
 tensorboard
-transformers==4.39.3
-trl>=0.8
-wandb
-# torch
+transformers==4.44.2
+trl>=0.8.6
+# wandb
