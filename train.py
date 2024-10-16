@@ -145,6 +145,7 @@ def main():
         peft_config=peft_config,
         formatting_func=formatting_func,
         max_seq_length=data_args.max_seq_length,
+        dataset_num_proc=data_args.dataset_num_proc,
     )
     trainer.train()
 

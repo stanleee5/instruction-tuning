@@ -8,7 +8,6 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 from datasets import DatasetDict, load_dataset, load_from_disk
-from transformers import DataCollatorForLanguageModeling
 from trl.trainer.utils import DataCollatorForCompletionOnlyLM
 
 from src.utils import get_logger
@@ -20,8 +19,7 @@ logger = get_logger()
 class DataArguments:
     # Load from YAML config or name/path
     data_name_or_path: str = field(default=None)
-    # data_config_yaml: str = field(default=None)
-    test_size: Optional[int] = field(default=512)
+    test_size: Optional[int] = field(default=64)
 
     # format: {instruction, response}
     instruction_key: Optional[str] = field(default="instruction")
@@ -34,6 +32,7 @@ class DataArguments:
     # format: {[conversations]}
     conversations_key: Optional[str] = field(default=None)
 
+    dataset_num_proc: int = field(default=16)
     max_seq_length: int = field(default=2048)
     masking: Optional[bool] = field(default=True)
 
@@ -94,8 +93,6 @@ def get_formatting_func(data_args: DataArguments, tokenizer) -> Callable:
         logger.info("Format: Single-turn instruction->response")
         return single_response_func
 
-    return single_response_func
-
 
 class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
     """ignore max_seq_lenth overflow warning"""
@@ -103,9 +100,9 @@ class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
     def torch_call(
         self, examples: List[Union[List[int], Any, Dict[str, Any]]]
     ) -> Dict[str, Any]:
-        assert self.instruction_template, "set instruction_template for Collator"
+        batch = super(DataCollatorForCompletionOnlyLM, self).torch_call(examples)
+        assert self.instruction_template
 
-        batch = DataCollatorForLanguageModeling.torch_call(self, examples)
         for i in range(len(examples)):
             response_token_ids_idxs = []
             human_token_ids_idxs = []
@@ -125,13 +122,12 @@ class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
                     )
 
             if len(response_token_ids_idxs) == 0:
-                # warnings.warn(
+                # logger.info(f"{self.response_token_ids}")
+                # logger.info(f"{self.tokenizer(self.response_template)}")
+                # logger.info(batch["input_ids"][i].tolist())
+                # logger.warning(
                 #     f"Could not find response key `{self.response_template}` in the "
                 #     f'following instance: {self.tokenizer.decode(batch["input_ids"][i])} '
-                #     f"Could not find response key `{self.response_token_ids}` in the "
-                #     f'following instance: {batch["input_ids"][i]} '
-                #     f"This instance will be ignored in loss calculation. "
-                #     f"Note, if this happens often, consider increasing the `max_seq_length`."
                 # )
                 batch["labels"][i, :] = self.ignore_index
 
@@ -147,7 +143,21 @@ class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
                     human_token_ids_idxs.append(human_idx)
 
             if len(human_token_ids_idxs) == 0:
+                # logger.warning(f"{human_token_ids = }")
+                # logger.warning(f"{self.tokenizer(self.instruction_template)}")
+                # logger.warning(batch["input_ids"][i].tolist())
+                # logger.warning(
+                #     f"Could not find instruction key `{self.instruction_template}` in the "
+                #     f'following instance: {self.tokenizer.decode(batch["input_ids"][i])} '
+                # )
                 batch["labels"][i, :] = self.ignore_index
+
+            if (
+                len(human_token_ids_idxs) > 0
+                and len(response_token_ids_idxs) > 0
+                and human_token_ids_idxs[0] > response_token_ids_idxs[0]
+            ):
+                human_token_ids_idxs = [0] + human_token_ids_idxs
 
             for idx, (start, end) in enumerate(
                 zip(human_token_ids_idxs, response_token_ids_idxs)
@@ -160,5 +170,15 @@ class InstructionTuningCollator(DataCollatorForCompletionOnlyLM):
 
             if len(response_token_ids_idxs) < len(human_token_ids_idxs):
                 batch["labels"][i, human_token_ids_idxs[-1] :] = self.ignore_index
+
+        if self.padding_free:
+            # remove padding, `attention_mask` and add `position_ids`
+            attn_mask = batch.pop("attention_mask")
+            batch["input_ids"] = batch["input_ids"][attn_mask.bool()].unsqueeze(0)
+            batch["position_ids"] = (
+                attn_mask.cumsum(1)[attn_mask.bool()].unsqueeze(0) - 1
+            )
+            batch["labels"] = batch["labels"][attn_mask.bool()].unsqueeze(0)
+            batch["labels"][batch["position_ids"] == 0] = self.ignore_index
 
         return batch
