@@ -88,5 +88,4 @@ def load_tokenizer(model_name_or_path: str):
     if tokenizer.pad_token is None:
         # https://clay-atlas.com/us/blog/2024/01/01/mistral-sft-trainer-cannot-generate-eos-token/
         tokenizer.add_special_tokens({"pad_token": tokenizer.unk_token})
-    logger.info(tokenizer)
     return tokenizer

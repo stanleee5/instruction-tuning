@@ -35,7 +35,7 @@ logger = get_logger()
 class TrainingArguments(TrainingArguments):
     label_names: Optional[List[str]] = field(default_factory=lambda: ["labels"])
     gradient_checkpointing: bool = field(default=True)
-    evaluation_strategy: Union[IntervalStrategy, str] = field(default="steps")
+    eval_strategy: Union[IntervalStrategy, str] = field(default="steps")
     logging_strategy: Union[IntervalStrategy, str] = field(default="steps")
     lr_scheduler_type: str = field(default="cosine")
     remove_unused_columns: Optional[bool] = field(default=True)
@@ -79,9 +79,30 @@ def parse_args():
     return model_args, data_args, training_args
 
 
-def main():
-    model_args, data_args, training_args = parse_args()
-    training_args.data_args = vars(data_args)
+def smart_tokenizer_and_embedding_resize(special_tokens_dict, tokenizer, model):
+    """Resize tokenizer and embedding.
+    Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
+    """
+    num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
+    model.resize_token_embeddings(len(tokenizer))
+
+    if num_new_tokens > 0:
+        input_embeddings_data = model.get_input_embeddings().weight.data
+        output_embeddings_data = model.get_output_embeddings().weight.data
+
+        input_embeddings_avg = input_embeddings_data[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
+        output_embeddings_avg = output_embeddings_data[:-num_new_tokens].mean(
+            dim=0, keepdim=True
+        )
+
+        input_embeddings_data[-num_new_tokens:] = input_embeddings_avg
+        output_embeddings_data[-num_new_tokens:] = output_embeddings_avg
+        logger.warning(f"{num_new_tokens = }")
+
+
+def setup_wandb(training_args):
     if WANDB_INSTALLED:
         if "wandb" in training_args.report_to and is_main_process():
             try:
@@ -98,42 +119,57 @@ def main():
             except Exception:
                 logger.warning("wandb not usable")
                 training_args.report_to = ["tensorboard"]
+    elif "wandb" in training_args.report_to:
+        logger.warning("wandb not installed")
+        training_args.report_to = ["tensorboard"]
 
+
+def main():
+    model_args, data_args, training_args = parse_args()
+    training_args.data_args = vars(data_args)
     logger.info(model_args)
     logger.info(data_args)
     logger.info(training_args)
 
+    setup_wandb(training_args)
     set_seed(training_args.seed)
-    tokenizer = load_tokenizer(model_args.model_name_or_path)
-    ds = load_and_split_datasets(data_args)
 
-    # set formatting function
+    model = load_model(training_args, model_args)
+    peft_config = load_peft_config(model_args)
+
+    tokenizer = load_tokenizer(model_args.model_name_or_path)
+    if tokenizer.chat_template is None:
+        tokenizer.chat_template = "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '[|system|]\n[EOS]\n' }}{% endif %}{{ '[|' + message['role'] + '|]\n' + message['content'] + '[EOS]\n'}}{% endfor %}{% if add_generation_prompt %}{{ '[|assistant|]\n' }}{% endif %}"
+        logger.warning(f"Setting chat_template: {tokenizer.chat_template}")
+        chat_special_tokens = ["[|system|]", "[|user|]", "[|assistant|]"]
+        logger.info(f"Add special tokens: {chat_special_tokens}")
+        smart_tokenizer_and_embedding_resize(
+            {"additional_special_tokens": chat_special_tokens}, tokenizer, model
+        )
+
+    ds = load_and_split_datasets(data_args)
     formatting_func = get_formatting_func(data_args, tokenizer)
     logger.info(repr(data_args.instruction_template))
     logger.info(repr(data_args.response_template))
 
     data_collator = None
     if data_args.masking:
-        is_codellama_tokenizer = (
-            type(tokenizer)
-            == transformers.models.code_llama.tokenization_code_llama_fast.CodeLlamaTokenizerFast
-        )
-        if is_codellama_tokenizer:
-            # 맨 앞에 붙는 special token 제거용
+        response_template = data_args.response_template
+        if isinstance(
+            tokenizer,
+            transformers.models.code_llama.tokenization_code_llama_fast.CodeLlamaTokenizerFast,
+        ):
+            # 맨 앞에 붙는 special token 제거
+            logger.warning("Fixing response_template for CodeLlama")
             response_template = tokenizer.encode(
-                data_args.response_template, add_special_tokens=False
+                response_template, add_special_tokens=False
             )[1:]
-        else:
-            response_template = data_args.response_template
 
         data_collator = ITDataCollator(
             tokenizer=tokenizer,
             instruction_template=data_args.instruction_template,
             response_template=response_template,
         )
-
-    model = load_model(training_args, model_args)
-    peft_config = load_peft_config(model_args)
 
     trainer = SFTTrainer(
         model=model,
